@@ -99,6 +99,7 @@ class VL6180X
     bool openVL6180X();		// Open the I2C bus to the VL6180X
     void closeVL6180X();	// Close the I2C bus to the VL6180X
 
+    void gpio(void);
     void configureDefault(void);
 
     void writeReg(uint16_t reg, uint8_t value);

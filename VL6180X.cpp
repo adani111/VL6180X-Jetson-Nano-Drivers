@@ -14,9 +14,51 @@
 #include <cstdio>
 #include <unistd.h>
 #include <errno.h>
+#include <iostream>
+// for delay function.
+#include <chrono>
+#include <thread>
+// for signal handling
+#include <signal.h>
+#include <JetsonGPIO.h>
 
 extern "C" {
 #include <i2c/smbus.h>
+}
+
+using namespace std;
+
+// Pin Definitions
+int output_pin = 6; // BOARD pin 31, BCM pin 6
+
+inline void delay(int s){
+        this_thread::sleep_for(chrono::seconds(s));
+}
+
+void VL6180X::gpio(void)
+{
+        // Pin Setup. 
+        GPIO::setmode(GPIO::BCM);
+        // set pin as an output pin with optional initial state of HIGH
+        GPIO::setup(output_pin, GPIO::OUT, GPIO::HIGH);
+	
+	uint16_t value;	
+	bool check = true;
+	while(check){
+        	GPIO::output(output_pin, GPIO::HIGH);
+		delay(0.001);
+        	value = readReg16Bit(SYSTEM_FRESH_OUT_OF_RESET);
+		printf("%d \n", value);
+		if(value != 0) { 
+			writeReg16Bit(SYSTEM_FRESH_OUT_OF_RESET, 0);
+			check = false;
+		}
+		else {
+			//printf("GPIO0 not configured correctly");
+			GPIO::output(output_pin, GPIO::LOW);
+			delay(0.001);
+		}
+	}
 }
 
 // Defines /////////////////////////////////////////////////////////////////////
@@ -146,7 +188,6 @@ void VL6180X::init()
     writeReg(0x1A7, 0x1F);
     writeReg(0x030, 0x00);
 
-    writeReg(SYSTEM_FRESH_OUT_OF_RESET, 0);
   }
   else
   {
@@ -162,7 +203,7 @@ void VL6180X::init()
     // Adjust the part-to-part range offset value read earlier to account for
     // existing scaling. If the sensor was already in 2x or 3x scaling mode,
     // precision will be lost calculating the original (1x) offset, but this can
-    // be resolved by resetting the sensor and Arduino again.
+    // be resolved by resetting the sensor awriteReg16Bit(SYSTEM_FRESH_OUT_OF_RESET, 0);nd Arduino again.
     ptp_offset *= scaling;
   }
 }
@@ -221,11 +262,7 @@ void VL6180X::configureDefault(void)
 // Write an 8-bit register
 void VL6180X::writeReg(uint16_t reg, uint8_t value)
 {
-    uint8_t buffer[2];
-    buffer[2] = (value >>  8) & 0xFF ;
-    buffer[3] = (value      ) & 0xFF ;
-
-    int toReturn = i2c_smbus_write_byte_data(kI2CFileDescriptor, reg, 2, buffer);
+    int toReturn = i2c_smbus_write_byte_data(kI2CFileDescriptor, reg, value);
     // Wait a little bit to make sure it settles
     if (toReturn < 0) {
         error = errno ;
@@ -250,7 +287,7 @@ void VL6180X::writeReg16Bit(uint16_t reg, uint16_t value)
 void VL6180X::writeReg32Bit(uint16_t reg, uint32_t value)
 {
     uint8_t buffer[4];
-    buffer[0] = (value >> 24) & 0xFF ;
+writeReg16Bit(SYSTEM_FRESH_OUT_OF_RESET, 0);    buffer[0] = (value >> 24) & 0xFF ;
     buffer[1] = (value >> 16) & 0xFF ;
     buffer[2] = (value >>  8) & 0xFF ;
     buffer[3] = (value      ) & 0xFF ;
@@ -343,6 +380,7 @@ void VL6180X::setScaling(uint8_t new_scaling)
 // millimeters
 uint8_t VL6180X::readRangeSingle()
 {
+  writeReg(SYSTEM_INTERRUPT_CONFIG_GPIO, 0x04);
   writeReg(SYSRANGE_START, 0x01);
   return readRangeContinuous();
 }
@@ -353,7 +391,9 @@ uint8_t VL6180X::readRangeSingle()
 uint8_t VL6180X::readRangeContinuous()
 {
     startTimeout();
-    while ((readReg(RESULT_INTERRUPT_STATUS_GPIO) & 0x04) == 0)
+    uint8_t value = readReg(RESULT_INTERRUPT_STATUS_GPIO);
+    printf("%d",value);
+    while (readReg(RESULT_INTERRUPT_STATUS_GPIO) != 0x04)
     {
         if (checkTimeoutExpired())
         {
@@ -363,8 +403,7 @@ uint8_t VL6180X::readRangeContinuous()
     }
 
     uint8_t range = readReg(RESULT_RANGE_VAL);
-    printf("%d", range);
-    writeReg(SYSTEM_INTERRUPT_CLEAR, 0x01);
+    writeReg(SYSTEM_INTERRUPT_CLEAR, 0x07);
 
     return range;
 }

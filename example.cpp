@@ -4,8 +4,18 @@
 #include <termios.h>
 #include <time.h>
 #include <VL6180X.h>
+#include <JetsonGPIO.h>
+#include <thread>
+#include <chrono>
+#include <iostream>
+
+using namespace std;
 
 VL6180X sensor;
+
+inline void delay(int s){
+        this_thread::sleep_for(chrono::seconds(s));
+}
 
 int getkey() {
     int character;
@@ -31,13 +41,13 @@ int getkey() {
 }
 
 int main() {
-    // VL6180X *sensor = new VL6180X();
     // Open the sensor
     if (!sensor.openVL6180X()) {
         // Trouble
         printf("Unable to open VL6180X") ;
         exit(-1) ;
     }
+    sensor.gpio();
     sensor.init();
     sensor.configureDefault();
     sensor.setTimeout(500);
@@ -49,9 +59,10 @@ int main() {
     while(getkey() != 27){
         int distance = sensor.readRangeSingleMillimeters();
         if (sensor.timeoutOccurred()) { printf("Sensor timeout!\n"); } 
-	else { printf("\nDistance: %d mm ",distance); }
+	else { printf("\nDistance: %d mm ",distance); }	
     }
     printf("\n\n");
-    //printf("Sensor deactivated\n");
-    //sensor.closeVL53L0X();
+    printf("Sensor deactivated\n");
+    GPIO::cleanup();
+    sensor.closeVL6180X();
 }
